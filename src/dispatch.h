@@ -1,6 +1,4 @@
-// Lock/Unlock API: per-slot weapon lock (sets state and pushes the bot onto
-// the locked weapon via the cached WeaponServices) and per-slot bot lock
-// (freezes CCSBot::Update decisions for that slot).
+// Unified lock dispatch. Three orthogonal per-slot lock kinds.
 
 #pragma once
 
@@ -10,23 +8,28 @@ class IVEngineServer2;
 
 namespace BotLocker
 {
+    // Lock category. Mirror BotLockerApi.LockKind on the C# side.
+    enum class LockKind : int
+    {
+        All    = 0,
+        Aim    = 1,
+        Weapon = 2,
+    };
+
     namespace Dispatch
     {
-        // Set by plugin.cpp Load(). Used by Commands/Hooks debug output.
         extern IVEngineServer2 *g_pEngine;
 
-        // ---- weapon lock (per-slot, target = which weapon slot) ----
-        // Returns 0 on success; <0 on error (see exports.cpp / spec).
-        int Lock(int slot, LockTarget target);
-        int Unlock(int slot);
-        void UnlockAll();
-        int  GetLock(int slot);   // returns LockTarget int value
+        // Lock a slot. arg = LockTarget int for Weapon kind, ignored otherwise.
+        int Lock(int slot, LockKind kind, int arg);
 
-        // ---- bot lock (per-slot, on/off; freezes AI decisions) ----
-        // Returns 0 on success; <0 on error.
-        int  LockBot(int slot);
-        int  UnlockBot(int slot);
-        void UnlockAllBots();
-        int  IsBotLocked(int slot);  // returns 0 / 1
+        // Unlock one slot for the given kind.
+        int Unlock(int slot, LockKind kind);
+
+        // Clear every slot for the given kind.
+        int UnlockAll(LockKind kind);
+
+        // 1 if All/Aim locked; for Weapon returns LockTarget int.
+        int IsLocked(int slot, LockKind kind);
     }
 }

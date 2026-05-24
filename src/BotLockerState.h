@@ -1,4 +1,4 @@
-// Per-slot bot lock flag. O(1), thread-safe.
+// Per-slot bot lock flags. All = freeze Update + Upkeep, Aim = Upkeep only.
 
 #pragma once
 
@@ -8,11 +8,16 @@ namespace BotLocker
     {
         constexpr int kMaxSlots = 64;
 
-        bool Get(int slot);
-        void Set(int slot, bool locked);
-        void ClearAll();
+        // All lock: blocks Update + Upkeep.
+        bool GetAll(int slot);
+        void SetAll(int slot, bool locked);
+        void ClearAllAll();
+        int  CountAll();
 
-        // Returns count of currently locked slots.
-        int  CountLocked();
+        // Aim lock: blocks Upkeep only.
+        bool GetAim(int slot);
+        void SetAim(int slot, bool locked);
+        void ClearAllAim();
+        int  CountAim();
     }
 }

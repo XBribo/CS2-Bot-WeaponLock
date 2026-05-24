@@ -1,4 +1,4 @@
-// Per-slot bot lock flag.
+// Per-slot bot lock flags.
 
 #include "BotLockerState.h"
 
@@ -9,29 +9,55 @@ namespace BotLocker
 {
     namespace BotLockerState
     {
-        static std::array<std::atomic<bool>, kMaxSlots> g_locks{};
+        static std::array<std::atomic<bool>, kMaxSlots> g_allLocks{};
+        static std::array<std::atomic<bool>, kMaxSlots> g_aimLocks{};
 
-        bool Get(int slot)
+        bool GetAll(int slot)
         {
             if (slot < 0 || slot >= kMaxSlots) return false;
-            return g_locks[slot].load(std::memory_order_relaxed);
+            return g_allLocks[slot].load(std::memory_order_relaxed);
         }
 
-        void Set(int slot, bool locked)
+        void SetAll(int slot, bool locked)
         {
             if (slot < 0 || slot >= kMaxSlots) return;
-            g_locks[slot].store(locked, std::memory_order_relaxed);
+            g_allLocks[slot].store(locked, std::memory_order_relaxed);
         }
 
-        void ClearAll()
+        void ClearAllAll()
         {
-            for (auto &x : g_locks) x.store(false, std::memory_order_relaxed);
+            for (auto &x : g_allLocks) x.store(false, std::memory_order_relaxed);
         }
 
-        int CountLocked()
+        int CountAll()
         {
             int n = 0;
-            for (auto &x : g_locks)
+            for (auto &x : g_allLocks)
+                if (x.load(std::memory_order_relaxed)) ++n;
+            return n;
+        }
+
+        bool GetAim(int slot)
+        {
+            if (slot < 0 || slot >= kMaxSlots) return false;
+            return g_aimLocks[slot].load(std::memory_order_relaxed);
+        }
+
+        void SetAim(int slot, bool locked)
+        {
+            if (slot < 0 || slot >= kMaxSlots) return;
+            g_aimLocks[slot].store(locked, std::memory_order_relaxed);
+        }
+
+        void ClearAllAim()
+        {
+            for (auto &x : g_aimLocks) x.store(false, std::memory_order_relaxed);
+        }
+
+        int CountAim()
+        {
+            int n = 0;
+            for (auto &x : g_aimLocks)
                 if (x.load(std::memory_order_relaxed)) ++n;
             return n;
         }

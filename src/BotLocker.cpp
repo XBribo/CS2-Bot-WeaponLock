@@ -1,8 +1,5 @@
-// CCSBot::Update + CCSBot::Upkeep detours. Update (~10Hz) drives AI
-// decisions; Upkeep (per-frame) drives view smoothing + jitter. Locking
-// only Update still lets Upkeep drift the view each frame, so we skip
-// both. Update preserves +21196 (AI-ran-this-tick) flag for engine gate;
-// Upkeep has no equivalent flag, just early-return.
+// CCSBot::Update + CCSBot::Upkeep detours. Skip the body when locked so
+// the bot stays passive; Update body keeps +21196 = 1 for the engine gate.
 
 #include "BotLocker.h"
 #include "BotLockerState.h"
@@ -19,10 +16,7 @@
 using Update_t = void (__fastcall *)(void *bot);
 using Upkeep_t = void (__fastcall *)(void *bot);
 
-// CCSBot field offsets (from IDA, server.dll Windows x64).
-// +21196 (0x52CC): AI-ran-this-tick byte flag; downstream code reads it
-// to gate "did the AI actually run". Setting it to 1 keeps the rest of
-// the bot lifecycle happy when we bypass the body of Update.
+// CCSBot AI-ran-this-tick byte flag at +21196.
 static constexpr int kOffsetAiTickedFlag = 21196;
 
 namespace BotLocker
@@ -36,12 +30,11 @@ namespace BotLocker
         static bool     g_installed    = false;
         static std::string g_status    = "not_attempted";
 
-        // Detour: lock check by slot -> skip AI body, but still mark the
-        // tick as ran so downstream "bot inactive" code paths don't fire.
+        // Skip the AI tick under All lock; still mark it as ran.
         static void __fastcall HookedUpdate(void *bot)
         {
             int slot = CCSBotToSlot(bot);
-            if (slot >= 0 && BotLockerState::Get(slot))
+            if (slot >= 0 && BotLockerState::GetAll(slot))
             {
                 *(reinterpret_cast<uint8_t *>(bot) + kOffsetAiTickedFlag) = 1;
                 return;
@@ -49,21 +42,19 @@ namespace BotLocker
             g_origUpdate(bot);
         }
 
-        // Detour: lock check by slot -> skip the per-frame view update
-        // entirely (no UpdateLookAround, no jitter, no UpdateLookAngles),
-        // freezing the view at its current angle. VProf scope not yet
-        // entered when we early-return, so no cleanup needed.
+        // Skip the per-frame view tick under All or Aim lock.
         static void __fastcall HookedUpkeep(void *bot)
         {
             int slot = CCSBotToSlot(bot);
-            if (slot >= 0 && BotLockerState::Get(slot))
+            if (slot >= 0 &&
+                (BotLockerState::GetAll(slot) || BotLockerState::GetAim(slot)))
             {
                 return;
             }
             g_origUpkeep(bot);
         }
 
-        // Find sig in real server.dll, lift into pattern bytes + wildcards.
+        // Resolve a sig from gamedata against the loaded server.dll.
         static void *ResolveSig(const std::string &gd, HMODULE serverModule,
                                 const char *name,
                                 char *errorOut, size_t errorOutLen)
@@ -123,8 +114,7 @@ namespace BotLocker
                                       errorOut, errorOutLen);
             if (!g_addrUpkeep) { g_status = "failed: Upkeep sig"; return false; }
 
-            // WeaponLockerHooks initialized MinHook already; just create
-            // and enable our hooks on top.
+            // MinHook already initialized by WeaponLockerHooks.
             if (MH_CreateHook(g_addrUpdate,
                               reinterpret_cast<void *>(&HookedUpdate),
                               reinterpret_cast<void **>(&g_origUpdate)) != MH_OK)

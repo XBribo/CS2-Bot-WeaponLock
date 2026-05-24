@@ -1,4 +1,4 @@
-// BotLocker console commands.
+// BotLocker console commands: bl_lock / bl_unlock / bl_unlock_all / bl_status.
 
 #include "commands.h"
 #include "dispatch.h"
@@ -23,6 +23,7 @@ namespace BotLocker
     {
         IVEngineServer2 *g_pEngine = nullptr;
 
+        // ClientPrintf to the calling player, or server log if from console.
         void PrintToCaller(const CCommandContext &context, const char *fmt, ...)
         {
             char buf[1024];
@@ -38,6 +39,17 @@ namespace BotLocker
                 Msg("%s", buf);
         }
 
+        // Parse kind string into LockKind.
+        static bool ParseKind(const char *s, LockKind &out)
+        {
+            if (!s) return false;
+            if (std::strcmp(s, "all")    == 0) { out = LockKind::All;    return true; }
+            if (std::strcmp(s, "aim")    == 0) { out = LockKind::Aim;    return true; }
+            if (std::strcmp(s, "weapon") == 0) { out = LockKind::Weapon; return true; }
+            return false;
+        }
+
+        // Parse "slotN" into LockTarget.
         static LockTarget ParseTarget(const char *s)
         {
             if (!s) return LockTarget::None;
@@ -61,158 +73,194 @@ namespace BotLocker
             default: return "none";
             }
         }
-    }
-}
 
-CON_COMMAND_F(blw_lock,
-              "blw_lock <slot> <slot1|slot2|slot3|slot4|slot5>  Lock the bot at <slot> to a weapon slot.",
-              FCVAR_NONE)
-{
-    if (args.ArgC() < 3)
-    {
-        BotLocker::Commands::PrintToCaller(context,
-            "usage: blw_lock <slot> <slot1|slot2|slot3|slot4|slot5>\n");
-        return;
-    }
-    const int slot = std::atoi(args.Arg(1));
-    const auto tgt = BotLocker::Commands::ParseTarget(args.Arg(2));
-    if (tgt == BotLocker::LockTarget::None)
-    {
-        BotLocker::Commands::PrintToCaller(context,
-            "[BWL] error: target must be slot1..slot5\n");
-        return;
-    }
-    int rc = BotLocker::Dispatch::Lock(slot, tgt);
-    if (rc == 0)
-        BotLocker::Commands::PrintToCaller(context,
-            "[BWL] locked slot %d to %s\n", slot, BotLocker::Commands::TargetName(tgt));
-    else if (rc == -1)
-        BotLocker::Commands::PrintToCaller(context,
-            "[BWL] error: plugin not initialized (rc=%d)\n", rc);
-    else
-        BotLocker::Commands::PrintToCaller(context,
-            "[BWL] error: invalid args (rc=%d)\n", rc);
-}
-
-CON_COMMAND_F(blw_unlock,
-              "blw_unlock <slot>  Unlock the bot at <slot>.",
-              FCVAR_NONE)
-{
-    if (args.ArgC() < 2)
-    {
-        BotLocker::Commands::PrintToCaller(context, "usage: blw_unlock <slot>\n");
-        return;
-    }
-    const int slot = std::atoi(args.Arg(1));
-    int rc = BotLocker::Dispatch::Unlock(slot);
-    if (rc == 0)
-        BotLocker::Commands::PrintToCaller(context,
-            "[BWL] unlocked slot %d\n", slot);
-    else
-        BotLocker::Commands::PrintToCaller(context,
-            "[BWL] error: invalid slot (rc=%d)\n", rc);
-}
-
-CON_COMMAND_F(blw_unlock_all,
-              "blw_unlock_all  Unlock every slot.",
-              FCVAR_NONE)
-{
-    BotLocker::Dispatch::UnlockAll();
-    BotLocker::Commands::PrintToCaller(context, "[BWL] unlocked all slots\n");
-}
-
-CON_COMMAND_F(blw_status,
-              "blw_status  Print hook status and locked slots.",
-              FCVAR_NONE)
-{
-    BotLocker::Commands::PrintToCaller(context,
-        "[BWL] hooks: %s | EquipBestWeapon=%p EquipPistol=%p SelectItem=%p GetSlot=%p\n",
-        BotLocker::WeaponLockerHooks::Status(),
-        BotLocker::WeaponLockerHooks::EquipBestWeaponAddress(),
-        BotLocker::WeaponLockerHooks::EquipPistolAddress(),
-        BotLocker::WeaponLockerHooks::SelectItemAddress(),
-        BotLocker::WeaponLockerHooks::GetSlotAddress());
-
-    int total = BotLocker::WeaponLockerState::CountLocked();
-    BotLocker::Commands::PrintToCaller(context,
-        "[BWL] locked count: %d\n", total);
-
-    if (total > 0)
-    {
-        for (int s = 0; s < BotLocker::WeaponLockerState::kMaxSlots; ++s)
+        static const char *KindName(LockKind k)
         {
-            auto t = BotLocker::WeaponLockerState::Get(s);
-            if (t != BotLocker::LockTarget::None)
+            switch (k)
             {
-                BotLocker::Commands::PrintToCaller(context,
-                    "[BWL]   slot %2d -> %s\n", s,
-                    BotLocker::Commands::TargetName(t));
+            case LockKind::All:    return "all";
+            case LockKind::Aim:    return "aim";
+            case LockKind::Weapon: return "weapon";
             }
+            return "?";
         }
     }
 }
 
-CON_COMMAND_F(bl_lock_bot,
-              "bl_lock_bot <slot>  Freeze the bot at <slot>'s AI tick.",
+CON_COMMAND_F(bl_lock,
+              "bl_lock <all|aim|weapon> <slot> [slot1..slot5]  "
+              "Lock a bot. weapon mode requires the weapon slot.",
               FCVAR_NONE)
 {
-    if (args.ArgC() < 2)
+    using namespace BotLocker;
+
+    if (args.ArgC() < 3)
     {
-        BotLocker::Commands::PrintToCaller(context, "usage: bl_lock_bot <slot>\n");
+        Commands::PrintToCaller(context,
+            "usage: bl_lock <all|aim|weapon> <slot> [slot1..slot5]\n");
         return;
     }
-    const int slot = std::atoi(args.Arg(1));
-    int rc = BotLocker::Dispatch::LockBot(slot);
-    if (rc == 0)
-        BotLocker::Commands::PrintToCaller(context, "[BL] locked bot slot %d\n", slot);
-    else
-        BotLocker::Commands::PrintToCaller(context,
-            "[BL] error: invalid slot (rc=%d)\n", rc);
-}
 
-CON_COMMAND_F(bl_unlock_bot,
-              "bl_unlock_bot <slot>  Unfreeze the bot at <slot>.",
-              FCVAR_NONE)
-{
-    if (args.ArgC() < 2)
+    LockKind kind;
+    if (!Commands::ParseKind(args.Arg(1), kind))
     {
-        BotLocker::Commands::PrintToCaller(context, "usage: bl_unlock_bot <slot>\n");
+        Commands::PrintToCaller(context,
+            "[BL] error: kind must be all|aim|weapon\n");
         return;
     }
-    const int slot = std::atoi(args.Arg(1));
-    int rc = BotLocker::Dispatch::UnlockBot(slot);
+
+    const int slot = std::atoi(args.Arg(2));
+    int arg = 0;
+
+    if (kind == LockKind::Weapon)
+    {
+        if (args.ArgC() < 4)
+        {
+            Commands::PrintToCaller(context,
+                "usage: bl_lock weapon <slot> <slot1..slot5>\n");
+            return;
+        }
+        const auto tgt = Commands::ParseTarget(args.Arg(3));
+        if (tgt == LockTarget::None)
+        {
+            Commands::PrintToCaller(context,
+                "[BL] error: weapon target must be slot1..slot5\n");
+            return;
+        }
+        arg = static_cast<int>(tgt);
+    }
+
+    int rc = Dispatch::Lock(slot, kind, arg);
     if (rc == 0)
-        BotLocker::Commands::PrintToCaller(context, "[BL] unlocked bot slot %d\n", slot);
+    {
+        if (kind == LockKind::Weapon)
+            Commands::PrintToCaller(context,
+                "[BL] locked slot %d weapon -> %s\n", slot,
+                Commands::TargetName(static_cast<LockTarget>(arg)));
+        else
+            Commands::PrintToCaller(context,
+                "[BL] locked slot %d (%s)\n", slot, Commands::KindName(kind));
+    }
     else
-        BotLocker::Commands::PrintToCaller(context,
-            "[BL] error: invalid slot (rc=%d)\n", rc);
+    {
+        Commands::PrintToCaller(context,
+            "[BL] error: lock failed (rc=%d)\n", rc);
+    }
 }
 
-CON_COMMAND_F(bl_unlock_all_bots,
-              "bl_unlock_all_bots  Unfreeze every bot.",
+CON_COMMAND_F(bl_unlock,
+              "bl_unlock <all|aim|weapon> <slot>  Release one lock on a bot.",
               FCVAR_NONE)
 {
-    BotLocker::Dispatch::UnlockAllBots();
-    BotLocker::Commands::PrintToCaller(context, "[BL] unlocked all bots\n");
+    using namespace BotLocker;
+
+    if (args.ArgC() < 3)
+    {
+        Commands::PrintToCaller(context,
+            "usage: bl_unlock <all|aim|weapon> <slot>\n");
+        return;
+    }
+
+    LockKind kind;
+    if (!Commands::ParseKind(args.Arg(1), kind))
+    {
+        Commands::PrintToCaller(context,
+            "[BL] error: kind must be all|aim|weapon\n");
+        return;
+    }
+
+    const int slot = std::atoi(args.Arg(2));
+    int rc = Dispatch::Unlock(slot, kind);
+    if (rc == 0)
+        Commands::PrintToCaller(context,
+            "[BL] unlocked slot %d (%s)\n", slot, Commands::KindName(kind));
+    else
+        Commands::PrintToCaller(context,
+            "[BL] error: unlock failed (rc=%d)\n", rc);
+}
+
+CON_COMMAND_F(bl_unlock_all,
+              "bl_unlock_all <all|aim|weapon>  Release every lock of that kind.",
+              FCVAR_NONE)
+{
+    using namespace BotLocker;
+
+    if (args.ArgC() < 2)
+    {
+        Commands::PrintToCaller(context,
+            "usage: bl_unlock_all <all|aim|weapon>\n");
+        return;
+    }
+
+    LockKind kind;
+    if (!Commands::ParseKind(args.Arg(1), kind))
+    {
+        Commands::PrintToCaller(context,
+            "[BL] error: kind must be all|aim|weapon\n");
+        return;
+    }
+
+    int rc = Dispatch::UnlockAll(kind);
+    if (rc == 0)
+        Commands::PrintToCaller(context,
+            "[BL] unlocked all (%s)\n", Commands::KindName(kind));
+    else
+        Commands::PrintToCaller(context,
+            "[BL] error: unlock_all failed (rc=%d)\n", rc);
 }
 
 CON_COMMAND_F(bl_status,
-              "bl_status  Print CCSBot hook status and frozen bots.",
+              "bl_status  Print hook status and every per-slot lock.",
               FCVAR_NONE)
 {
-    BotLocker::Commands::PrintToCaller(context,
-        "[BL] hooks: %s | Update=%p | Upkeep=%p\n",
-        BotLocker::BotLockerHooks::Status(),
-        BotLocker::BotLockerHooks::UpdateAddress(),
-        BotLocker::BotLockerHooks::UpkeepAddress());
+    using namespace BotLocker;
 
-    int total = BotLocker::BotLockerState::CountLocked();
-    BotLocker::Commands::PrintToCaller(context,
-        "[BL] frozen bot count: %d\n", total);
-    if (total > 0)
+    // Hooks
+    Commands::PrintToCaller(context,
+        "[BL] weapon hooks: %s | EquipBest=%p EquipPistol=%p SelectItem=%p GetSlot=%p\n",
+        WeaponLockerHooks::Status(),
+        WeaponLockerHooks::EquipBestWeaponAddress(),
+        WeaponLockerHooks::EquipPistolAddress(),
+        WeaponLockerHooks::SelectItemAddress(),
+        WeaponLockerHooks::GetSlotAddress());
+
+    Commands::PrintToCaller(context,
+        "[BL] bot hooks:    %s | Update=%p Upkeep=%p\n",
+        BotLockerHooks::Status(),
+        BotLockerHooks::UpdateAddress(),
+        BotLockerHooks::UpkeepAddress());
+
+    // All lock
+    int nAll = BotLockerState::CountAll();
+    Commands::PrintToCaller(context, "[BL] all-locked count:    %d\n", nAll);
+    if (nAll > 0)
     {
-        for (int s = 0; s < BotLocker::BotLockerState::kMaxSlots; ++s)
-            if (BotLocker::BotLockerState::Get(s))
-                BotLocker::Commands::PrintToCaller(context, "[BL]   slot %2d\n", s);
+        for (int s = 0; s < BotLockerState::kMaxSlots; ++s)
+            if (BotLockerState::GetAll(s))
+                Commands::PrintToCaller(context, "[BL]   all   slot %2d\n", s);
+    }
+
+    // Aim lock
+    int nAim = BotLockerState::CountAim();
+    Commands::PrintToCaller(context, "[BL] aim-locked count:    %d\n", nAim);
+    if (nAim > 0)
+    {
+        for (int s = 0; s < BotLockerState::kMaxSlots; ++s)
+            if (BotLockerState::GetAim(s))
+                Commands::PrintToCaller(context, "[BL]   aim   slot %2d\n", s);
+    }
+
+    // Weapon lock
+    int nWp = WeaponLockerState::CountLocked();
+    Commands::PrintToCaller(context, "[BL] weapon-locked count: %d\n", nWp);
+    if (nWp > 0)
+    {
+        for (int s = 0; s < WeaponLockerState::kMaxSlots; ++s)
+        {
+            auto t = WeaponLockerState::Get(s);
+            if (t != LockTarget::None)
+                Commands::PrintToCaller(context, "[BL]   weapon slot %2d -> %s\n",
+                                        s, Commands::TargetName(t));
+        }
     }
 }

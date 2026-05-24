@@ -1,59 +1,37 @@
 // C-ABI exports for CounterStrikeSharp P/Invoke. Main-thread only.
 
 #include "dispatch.h"
-#include "WeaponLockerState.h"
 
 extern "C" __declspec(dllexport)
-int BotLocker_Lock(int slot, int target)
+int BotLocker_Lock(int slot, int kind, int arg)
 {
     return BotLocker::Dispatch::Lock(slot,
-        static_cast<BotLocker::LockTarget>(target));
+        static_cast<BotLocker::LockKind>(kind), arg);
 }
 
 extern "C" __declspec(dllexport)
-int BotLocker_Unlock(int slot)
+int BotLocker_Unlock(int slot, int kind)
 {
-    return BotLocker::Dispatch::Unlock(slot);
+    return BotLocker::Dispatch::Unlock(slot,
+        static_cast<BotLocker::LockKind>(kind));
 }
 
 extern "C" __declspec(dllexport)
-void BotLocker_UnlockAll()
+int BotLocker_UnlockAll(int kind)
 {
-    BotLocker::Dispatch::UnlockAll();
+    return BotLocker::Dispatch::UnlockAll(
+        static_cast<BotLocker::LockKind>(kind));
 }
 
 extern "C" __declspec(dllexport)
-int BotLocker_GetLock(int slot)
+int BotLocker_IsLocked(int slot, int kind)
 {
-    return BotLocker::Dispatch::GetLock(slot);
-}
-
-extern "C" __declspec(dllexport)
-int BotLocker_LockBot(int slot)
-{
-    return BotLocker::Dispatch::LockBot(slot);
-}
-
-extern "C" __declspec(dllexport)
-int BotLocker_UnlockBot(int slot)
-{
-    return BotLocker::Dispatch::UnlockBot(slot);
-}
-
-extern "C" __declspec(dllexport)
-void BotLocker_UnlockAllBots()
-{
-    BotLocker::Dispatch::UnlockAllBots();
-}
-
-extern "C" __declspec(dllexport)
-int BotLocker_IsBotLocked(int slot)
-{
-    return BotLocker::Dispatch::IsBotLocked(slot);
+    return BotLocker::Dispatch::IsLocked(slot,
+        static_cast<BotLocker::LockKind>(kind));
 }
 
 extern "C" __declspec(dllexport)
 int BotLocker_GetVersion()
 {
-    return 3;
+    return 4;
 }
