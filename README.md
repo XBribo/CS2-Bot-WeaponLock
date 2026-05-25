@@ -1,15 +1,17 @@
 # CS2-Bot-Locker
 
-CS2-Bot-Locker is a Metamod:Source plugin for Counter-Strike 2 that can lock Bot's Weapon/Aim/All
+CS2-Bot-Locker is a Metamod:Source plugin for Counter-Strike 2 that can lock Bot's Weapon/Aim/Jump/All
 It can be installed on win64 clients.
 
 - **Weapon** — pin a bot to one weapon slot; AI switches are blocked.
 - **Aim** — freeze `CCSBot::Upkeep`; view holds still, AI keeps deciding/moving.
+- **Jump** — block `CCSBot::Jump`; bot stops jumping, move/fire/aim unaffected.
 - **All** — freeze both `CCSBot::Update` and `CCSBot::Upkeep`.
+
 
 ## Your stars⭐ are my motivation to keep updating
 
-**Version**: 0.3.0 · **ABI**: 4
+**Version**: 0.3.1 · **ABI**: 5
 
 ## Slots
 
@@ -39,9 +41,9 @@ cmake --build build --config Release
 ## Commands
 
 ```
-bl_lock <all|aim|weapon> <slot> [slot1..slot5]
-bl_unlock <all|aim|weapon> <slot>
-bl_unlock_all <all|aim|weapon>
+bl_lock <all|aim|jump|weapon> <slot> [slot1..slot5]
+bl_unlock <all|aim|jump|weapon> <slot>
+bl_unlock_all <all|aim|jump|weapon>
 bl_status
 ```
 
@@ -49,6 +51,7 @@ bl_status
 
 ```
 bl_lock aim 1                # freeze bot 1's view, AI still runs
+bl_lock jump 1               # bot 1 can no longer jump
 bl_lock all 1                # full freeze
 bl_lock weapon 1 slot3       # force bot 1 to knife
 bl_unlock_all weapon         # clear every weapon lock
@@ -61,9 +64,10 @@ Drop `scripts/BotLocker.NativeApi.cs` into your project.
 ```csharp
 using BotLockerApi;
 
-if (!BotLocker.IsCompatible()) return;   // requires ABI 4
+if (!BotLocker.IsCompatible()) return;   // requires ABI 5
 
 BotLocker.Lock(slot, LockKind.Aim);
+BotLocker.Lock(slot, LockKind.Jump);
 BotLocker.Lock(slot, LockKind.All);
 BotLocker.Lock(slot, LockTarget.Slot3);  // weapon lock
 BotLocker.Unlock(slot, LockKind.Aim);
