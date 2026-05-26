@@ -14,6 +14,7 @@
 
 #include "WeaponLocker.h"
 #include "BotLocker.h"
+#include "InputInjector.h"
 #include "dispatch.h"
 #include "WeaponLockerState.h"
 #include "BotLockerState.h"
@@ -34,7 +35,7 @@ public:
     const char *GetDescription() override { return "Lock CS2 bots: freeze AI tick and/or pin to a weapon slot."; }
     const char *GetURL() override { return ""; }
     const char *GetLicense() override { return "GPLv3"; }
-    const char *GetVersion() override { return "0.3.1"; }
+    const char *GetVersion() override { return "0.3.2"; }
     const char *GetDate() override { return __DATE__; }
     const char *GetLogTag() override { return "BL"; }
 };
@@ -134,12 +135,27 @@ bool BotLockerPlugin::Load(PluginId id, ISmmAPI *ismm,
         return false;
     }
 
+    // ProcessUsercmd hook for demo-replay UserCmd injection. Optional: a sig
+    // miss only kills replay injection, not the lock hooks above.
+    char injErr[256] = {0};
+    if (!BotLocker::InputInjector::Install(gamedataPath, serverIface,
+                                           injErr, sizeof(injErr)))
+    {
+        char dbg[320];
+        std::snprintf(dbg, sizeof(dbg),
+                      "[BotLocker] WARN: InputInjector::Install failed (%s); "
+                      "BotLocker_InjectUserCmd will be a no-op\n",
+                      injErr);
+        OutputDebugStringA(dbg);
+    }
+
     OutputDebugStringA("[BotLocker] plugin loaded successfully\n");
     return true;
 }
 
 bool BotLockerPlugin::Unload(char * /*error*/, size_t /*maxlen*/)
 {
+    BotLocker::InputInjector::Remove();
     BotLocker::BotLockerHooks::Remove();
     BotLocker::WeaponLockerHooks::Remove();
     BotLocker::WeaponLockerState::ClearAll();

@@ -4,6 +4,7 @@
 #include "dispatch.h"
 #include "WeaponLocker.h"
 #include "BotLocker.h"
+#include "InputInjector.h"
 #include "WeaponLockerState.h"
 #include "BotLockerState.h"
 
@@ -233,6 +234,11 @@ CON_COMMAND_F(bl_status,
         BotLockerHooks::UpkeepAddress(),
         BotLockerHooks::JumpAddress());
 
+    Commands::PrintToCaller(context,
+        "[BL] input inject: %s | ProcessUsercmd=%p\n",
+        InputInjector::Status(),
+        InputInjector::ProcessUsercmdAddress());
+
     // All lock
     int nAll = BotLockerState::CountAll();
     Commands::PrintToCaller(context, "[BL] all-locked count:    %d\n", nAll);
@@ -275,5 +281,15 @@ CON_COMMAND_F(bl_status,
                 Commands::PrintToCaller(context, "[BL]   weapon slot %2d -> %s\n",
                                         s, Commands::TargetName(t));
         }
+    }
+
+    // Input injection
+    int nInj = InputInjector::CountActive();
+    Commands::PrintToCaller(context, "[BL] inject-active count: %d\n", nInj);
+    if (nInj > 0)
+    {
+        for (int s = 0; s < InputInjector::kMaxSlots; ++s)
+            if (InputInjector::IsActive(s))
+                Commands::PrintToCaller(context, "[BL]   inject slot %2d\n", s);
     }
 }
